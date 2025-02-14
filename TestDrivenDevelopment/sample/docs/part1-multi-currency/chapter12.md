@@ -289,3 +289,201 @@ Money plus(Money addend) {
                Money reduce(String to);
            ```
        - 変わらずテストは通った！
+
+### 現在の ToDo リスト
+
+- [ ] 5USD + 10CHF = 10USD (レートが 2:1 の場合)
+- [ ] 5USD + 5USD = 10USD
+- [ ] 5USD + 5USD が Money を返す
+- [ ] Money を変換して換算を行う
+- [ ] Reduce(Bank, String)
+
+# 第 14 章 学習用テストと回帰テスト
+
+## テストの２つの新たな用途
+
+### 今回の目的
+
+- 5USD + 10CHF = 10USD を実現するため、まずは、ある通貨を別のある通貨に変換できるようにしなければならない
+- 例えば、10CHF = 5USD のような変換
+- この機能は、Bunk クラスに持たせる
+- また、この機能を実装するためには、10CHF を 5USD に変換するためのレートが必要である
+- レートは通貨のペアをキーとする Hashmap で管理する
+
+### 2CHF = 1USD を確かめるテストを追加する
+
+1. テストコードを追加する
+
+   ```java
+    public void testReduceMoneyDifferentCurrency() {
+        Bank bank = new Bank();
+        bank.addRate("CHF", "USD", 2);
+        Money result = bank.reduce(Money.franc(2), "USD");
+        assertEquals(Money.dollar(1), result);
+    }
+   ```
+
+2. bankAddRate() メソッドを実装する
+
+   ```java
+       void addRate(String from, String to, int rate) {
+           rates.put(new Pair(from, to), rate);
+       }
+   ```
+
+3. テストを実行する
+
+   - コンパイルが通ったので、テストを実行する
+   - もちろん、レッド！
+
+4. エラー文を見てみる
+
+   - AssertionFailedError: expected: <1 USD> but was: <2 CHF>
+   - これは、2CHF を 1USD に変換しているはずだが、2CHF のままであることを示している。
+   - それもそのはず、Money.reduce() メソッドは、以下のような実装になっているからだ
+
+   ```java
+       public Money reduce(String to) {
+           return this;
+       }
+   ```
+
+5. Money クラスの reduce() メソッドを変更する
+
+   ```java
+    public Money reduce(String to) {
+        int rate = this.currency().equals("CHF") && to.equals("USD") ? 2 : 1;
+        return new Money(amount / rate, to);
+    }
+   ```
+
+   - テスト グリーン！
+   - とりあえず、仮実装はできた。
+
+6. リファクタリング
+
+   1. 為替レートは Bank クラスに任せる
+      - 現在の設計だと、為替レート int rate は Money クラス自身が把握していることになっている。
+      - しかし、これは Bnak クラスの責務のため、Bank クラスに任せる
+      - Bunk.rate() メソッド
+        ```java
+        int rate(String from, String to) {
+            int rate = from.equals("CHF") && to.equals("USD") ? 2 : 1;
+            return rate;
+        }
+        ```
+      ````
+      - Money.reduce() メソッド
+        ```java
+        public Money reduce(String to, Bank bank) {
+            int rate = bank.rate(currency, to);
+            return new Money(amount / rate, to);
+        }
+      ````
+   2. 為替レートは、Map で管理する
+
+      - 為替レートは、Map に格納する。表で管理するイメージだ。
+      - Map<Pair, Integer> rates = new HashMap<>(); とする
+      - Pair クラスは、from と to を保持するクラスである
+
+      1. Bank クラスに為替レートを管理するため Map<Pair, Integer> rates を追加する
+
+         ```java
+             public class Bank {
+                 private Map<Pair, Integer> rates = new HashMap<>();
+
+                 Money reduce(Expression source, String to) {
+                     return source.reduce(to, this);
+                 }
+
+                 int rate(String from, String to) {
+                     return rates.get(new Pair(from, to));
+                 }
+
+                 void addRate(String from, String to, int rate) {
+                     rates.put(new Pair(from, to), rate);
+                 }
+             }
+         ```
+
+      2. 為替レートを管理するための Pair クラスを作成する
+
+         ```java
+             package money;
+
+             public class Pair {
+                 private String from;
+                 private String to;
+
+                 Pair(String from, String to) {
+                     this.from = from;
+                     this.to = to;
+                 }
+
+                 public boolean equals(Object object) {
+                     Pair pair = (Pair) object;
+                     return from.equals(pair.from) && to.equals(pair.to);
+                 }
+
+                 public int hashCode() {
+                     return 0;
+                 }
+             }
+         ```
+
+      3. テストを実行する
+
+         - コンパイルが通ったので、テストを実行する
+         - すると、レッド！
+         - 原因は、NullPointerException: Cannot invoke "java.lang.Integer.intValue()" because the return value of "java.util.Map.get(Object)" is null
+         - 詳しく見てみると、money.MoneyTest.testReduceMoney(MoneyTest.java:65) つまり、
+
+           ```java
+               public void testReduceMoney() {
+                   Bank bank = new Bank();
+                   Money result = bank.reduce(Money.dollar(1), "USD");
+                   assertEquals(Money.dollar(1), result);
+               }
+           ```
+
+           - で発生している。USD から USD への変換レートを見るけることができなかったことによるエラーのようだ。
+
+      4. Bank.rate() メソッドを変更する
+
+         ```java
+             int rate(String from, String to) {
+                 if (from.equals(to)) {
+                     return 1;
+                 }
+                 return rates.get(new Pair(from, to));
+             }
+         ```
+
+         - テストを実行すると、無事通った。
+
+### 学習テスト
+
+- 今回、為替レートを管理する仕組みを設計する上で、当初は from と to を Pair ではなく Object[] で管理しようと想定していた
+- しかし、Object[] の equals() の仕様がわからなかったため、一時的に以下の様なテストケースを作成し、テストを行うことで分析した
+  ```java
+  public void testArrayEquals() {
+      assertTrue(new Object[] {"abc"}.equals(new Object[] {"abc"}));
+  }
+  ```
+- すると、テストは失敗する。
+- つまり、Object[] は要素の文字列が同じものであっても、false となり、Object そのものが同じでないと true とはならないことがわかる。
+- このような、仕様のわからないクラスやメソッドの仕様を明らかにするために一時的に記述するテストケースのことを、学習テストという。
+
+### 回帰テスト
+
+- 今回、6.2.3 では NullPointerException: Cannot invoke "java.lang.Integer.intValue()" because the return value of "java.util.Map.get(Object)" is null が money.MoneyTest.testReduceMoney(MoneyTest.java:65) で発生した。
+- 原因は、USD から USD への変換レートを見るけることができなかったことによるものだった。
+- このエラーの修正を確認するために、あるテストケースを書くことにした。
+
+  ```java
+  public void testIdentityRate() {
+      assertEquals(1, new Bank().rate("USD", "USD"));
+  }
+  ```
+
+- このように、機能の追加により既存の動作の不具合を防ぐためのテストケースのことを回帰テストという。

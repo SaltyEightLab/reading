@@ -18,6 +18,10 @@ public class Money implements Expression {
         return amount == money.amount && currency().equals(money.currency());
     }
 
+    public String toString() {
+        return amount + " " + currency;
+    }
+
     String currency() {
         return currency;
     }
@@ -34,7 +38,8 @@ public class Money implements Expression {
         return new Sum(this, addend);
     }
 
-    public Money reduce(String to) {
-        return this;
+    public Money reduce(String to, Bank bank) {
+        int rate = bank.rate(this.currency, to);
+        return new Money(amount / rate, to);
     }
 }
