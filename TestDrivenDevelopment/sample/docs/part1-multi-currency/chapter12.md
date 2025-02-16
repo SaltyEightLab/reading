@@ -1,6 +1,6 @@
 # 第 12 章 設計とメタファー
 
-##
+## Imposter パターンによって ひらめきを代替する
 
 ### 今回の目的
 
@@ -20,11 +20,11 @@
 
 2. plus() メソッドを実装する
 
-```java
-Money plus(Money addend) {
-    return new Money(amount + addend.amount, currency);
-}
-```
+   ```java
+   Money plus(Money addend) {
+       return new Money(amount + addend.amount, currency);
+   }
+   ```
 
 ### 問題点
 
@@ -82,44 +82,44 @@ Money plus(Money addend) {
 
   1. Expression インターフェースを作成する
 
-  ```java
-  package money;
+     ```java
+     package money;
 
-  public interface Expression {
-  }
-  ```
+     public interface Expression {
+     }
+     ```
 
   2. Money.plus() が Expression を返すようにする
 
-  - また、このとき、Money は Expression を implements するようにする
+     - また、このとき、Money は Expression を implements するようにする
 
-  ```java
-  Expression plus(Money addend) {
-      return new Money(amount + addend.amount, currency);
-  }
-  ```
+       ```java
+       Expression plus(Money addend) {
+           return new Money(amount + addend.amount, currency);
+       }
+       ```
 
   3. Bank クラスを作成し、reduce() メソッドを実装する
 
-  ```java
-    package money;
+     ```java
+       package money;
 
-    public class Bank {
-        Money reduce(Expression source, String to) {
-            return Money.dollar(10);
-        }
-    }
-  ```
+       public class Bank {
+           Money reduce(Expression source, String to) {
+               return Money.dollar(10);
+           }
+       }
+     ```
 
   4. テストを実施するとテストが通る！
 
-  ### 結果
+### 結果
 
-  - これで、仮実装を終えることができた
-  - 次回、リファクタリングを行う
-  - 現在の ToDo リスト
-    - [ ] 5USD + 10CHF = 10USD (レートが 2:1 の場合)
-    - [ ] 5USD + 5USD = 10USD
+- これで、仮実装を終えることができた
+- 次回、リファクタリングを行う
+- 現在の ToDo リスト
+  - [ ] 5USD + 10CHF = 10USD (レートが 2:1 の場合)
+  - [ ] 5USD + 5USD = 10USD
 
 # 第 13 章 実装を導くテスト
 
@@ -300,7 +300,7 @@ Money plus(Money addend) {
 
 # 第 14 章 学習用テストと回帰テスト
 
-## テストの２つの新たな用途
+## 新たな２つのテストの用途
 
 ### 今回の目的
 
@@ -372,14 +372,13 @@ Money plus(Money addend) {
             return rate;
         }
         ```
-      ````
       - Money.reduce() メソッド
         ```java
         public Money reduce(String to, Bank bank) {
             int rate = bank.rate(currency, to);
             return new Money(amount / rate, to);
         }
-      ````
+        ```
    2. 為替レートは、Map で管理する
 
       - 為替レートは、Map に格納する。表で管理するイメージだ。
@@ -487,3 +486,189 @@ Money plus(Money addend) {
   ```
 
 - このように、機能の追加により既存の動作の不具合を防ぐためのテストケースのことを回帰テストという。
+
+# 第 15 章 テスト任せとコンパイラ任せ
+
+## 進むべき道はコンパイラが示してくれる。道を外れたことはテストが教えてくれる。
+
+### 今回の目的
+
+- 前回、10CHF = 5USD のような変換ができるようにした
+- ついに、5USD + 10CHF = 10USD の足し算に挑戦する
+
+### 手順
+
+1. テストコードを記述する
+
+   ```java
+       public void testMixedAddition() {
+           Money fiveBucks = Money.dollar(5);
+           Money tenFrancs = Money.franc(10);
+           Bank bank = new Bank();
+           bank.addRate("CHF", "USD", 2);
+           Money result = bank.reduce(fiveBucks.plus(tenFrancs), "USD");
+           assertEquals(Money.dollar(10), result);
+       }
+   ```
+
+   - 以下の様にエラーが帰ってくる
+   - testMixedAddition() org.opentest4j.AssertionFailedError: expected: <10 USD> but was: <15 USD>
+   - Sum.reduce() の実装に問題あるようなので、この解消に取り組む。
+
+2. Sum.reduce() を変更する。
+
+   - 現状、以下のようになっている
+   - augend と addend として受けとったものを reduce() してから足し合わせるようにする。
+   - 変更前
+
+   ```java
+       public Money reduce(String to, Bank bank) {
+           int amount = augend.amount + addend.amount;
+           return new Money(amount, to);
+       }
+   ```
+
+   - 変更後
+   - テストが通るようになる！
+
+   ```java
+       public Money reduce(String to, Bank bank) {
+           int amount = augend.reduce(to, bank).amount + addend.reduce(to, bank).amount;
+           return new Money(amount, to);
+       }
+   ```
+
+### 取り入れられるところには Composite パターンを適用していく
+
+- 引数や戻り値として Money となっている箇所を Expression に置き換えていく。
+- これを行うことで、Conposite パターンへの適用を進めていく
+
+1. Sum クラスと Money クラスを Expression インターフェースに対応させる
+
+   - 変更前
+
+     ```java
+     package money;
+
+     public class Sum implements Expression {
+         Money augend;
+         Money addend;
+
+         Sum(Money augend, Money addend) {
+             this.augend = augend;
+             this.addend = addend;
+         }
+         ...
+     }
+
+     package money;
+
+     public class Money implements Expression {
+         protected int amount;
+         protected String currency;
+
+
+         Money times(int multiplier) {
+             return new Money(amount * multiplier, currency);
+         }
+
+         Money plus(Money addend) {
+             return new Money(amount + addend.amount, currency);
+         }
+         ...
+     }
+     ```
+
+   - 変更後
+
+     ```java
+     package money;
+
+     public class Sum implements Expression {
+         Expression augend;
+         Expression addend;
+
+         Sum(Expression augend, Expression addend) {
+             this.augend = augend;
+             this.addend = addend;
+         }
+
+         ...
+     }
+
+     package money;
+
+     public class Money implements Expression {
+         protected int amount;
+         protected String currency;
+
+
+         Expression times(int multiplier) {
+             return new Money(amount * multiplier, currency);
+         }
+
+         Expression plus(Expression addend) {
+             return new Sum(this, addend);
+         }
+         ...
+     }
+
+     ```
+
+2. テストも Expression に対応させる
+
+   - 変更前
+
+     ```java
+         public void testMixedAddition() {
+             Money fiveBucks = Money.dollar(5);
+             Money tenFrancs = Money.franc(10);
+             Bank bank = new Bank();
+             bank.addRate("CHF", "USD", 2);
+             Money result = bank.reduce(fiveBucks.plus(tenFrancs), "USD");
+             assertEquals(Money.dollar(10), result);
+         }
+     ```
+
+   - 変更後
+
+     ```java
+         public void testMixedAddition() {
+             Expression fiveBucks = Money.dollar(5);
+             Expression tenFrancs = Money.franc(10);
+             Bank bank = new Bank();
+             bank.addRate("CHF", "USD", 2);
+             Money result = bank.reduce(fiveBucks.plus(tenFrancs), "USD");
+             assertEquals(Money.dollar(10), result);
+         }
+     ```
+
+   - コンパイラが以下の様に教えてくれる
+   - The method plus(Expression) is undefined for the type Expression
+   - つまり、Expression には plus(Expression) メソッドがないということだ。
+   - そこで、Expression に plus(Expression) メソッドを追加する
+
+3. Expression インターフェースに plus(Expression) メソッドを追加する
+
+   ```java
+   package money;
+
+   public interface Expression {
+       Money reduce(String to, Bank bank);
+
+       Expression plus(Expression addend);
+   }
+   ```
+
+4. Money, Sum に plus() を実装にする
+
+   - Money plus() を public にすることで、Expression から見えるようにする
+   - Sum に plus() をから実装する
+
+     ```java
+         public Expression plus(Expression addend) {
+             return null;
+         }
+     ```
+
+   - テストが通った！
