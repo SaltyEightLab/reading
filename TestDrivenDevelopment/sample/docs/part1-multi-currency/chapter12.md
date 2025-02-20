@@ -672,3 +672,112 @@
      ```
 
    - テストが通った！
+
+# 第 16 章 将来の読み手を考えたテスト
+
+## 結果を検証するテスト、意図が伝わるテストはドキュメントとして機能する
+
+### 今回の目的
+
+- 前回、Sum クラスの plus() メソッドはから実装だった。それを実装する。
+- Sum.times() メソッドの実装も行う
+
+### Sum.plus() を実装する
+
+1. テストコードを記述する
+
+   ```java
+    public void testSumPlusMoney() {
+        Expression fiveBucks = Money.dollar(5);
+        Expression tenFrancs = Money.franc(10);
+        Bank bank = new Bank();
+        bank.addRate("CHF", "USD", 2);
+        Expression sum = new Sum(fiveBucks, tenFrancs).plus(fiveBucks);
+        Money result = bank.reduce(sum, "USD");
+        assertEquals(Money.dollar(15), result);
+    }
+   ```
+
+   - 本書では、上記テストコードの前半部分に他のテストコードとの重複が見られるので、フィクスチャの使用が提案されている。
+
+2. テストを実行する
+
+   - テストを実行すると、以下のようなエラーが帰ってくる
+   - testSumPlusMoney() java.lang.NullPointerException: Cannot invoke "money.Expression.reduce(String, money.Bank)" because "source" is null
+   - これは、Sum.plus() が null を返しているために発生している。
+
+3. Sum.plus() を実装する
+
+   ```java
+    public Expression plus(Expression addend) {
+        return new Sum(this, addend);
+    }
+   ```
+
+   - テストを実行すると、テストが通る。
+
+### Sum.times() を実装する
+
+1. テストコードを記述する
+
+   ```java
+    public void testSumTimes() {
+        Expression fiveBucks = Money.dollar(5);
+        Expression tenFrancs = Money.franc(10);
+        Bank bank = new Bank();
+        bank.addRate("CHF", "USD", 2);
+        Expression sum = new Sum(fiveBucks, tenFrancs).times(2);
+        Money result = bank.reduce(sum, "USD");
+        assertEquals(Money.dollar(20), result);
+    }
+   ```
+
+2. Sum.times() を実装する
+
+   ```java
+    public Expression times(int multiplier) {
+        return new Sum(augend.times(multiplier), addend.times(multiplier));
+    }
+   ```
+
+   - これに付随して、Expression インターフェースに times(int) メソッドを追加する
+   - テストを実行すると、テストが通る。
+
+### 将来の読み手を考えたテスト
+
+- テストコードは単なる動作確認のためのものではなく、将来的な開発者の理解を助ける役割を持つべきである。
+- テストコードはそのときの開発者だけでなく、将来の開発者が読んでも意図が明確に伝わるように設計すべきである。
+- 実装の詳細を検証するテストコードは将来のコード変更の妨げとなってしまう。
+- 計算の結果を検証するテストコードを記述すべきである。
+- テストコードはドキュメントとしても機能する。読んだだけでプログラムの使用がわかるテストコードと意図が明確なテスト名をつけるようにする。
+
+# 第 16 章 他国通貨全体のふりかえり
+
+### 他国通貨開発の学び
+
+- 変更が多い箇所でこそ TDD は輝く
+  å う題材について
+  - 今回、他国通過を題材に扱ったが、筆者は何かを執筆する度に TDD を用いてこの他国通過を開発し直してきた。
+  - 今回は Expression という発明に至ったが、これは今までにはない発想だった。
+  - TDD のテストが先、実装が後という自由度の大きい開発手法だからこその結果だったのではないか。
+- 今回の他国通過の開発にあたって、述べ 125 回のテストを実行した。
+- プロダクトコードとテストコードの合計行数は同じくらいになった
+- テスト駆動開発のプロセス
+  - 小さいテストを追加する
+  - 全てのテストを動かし、失敗があることを確認する
+  - 変更を行う
+  - 再び全てのテストを動かし、すべて成功することを確認する
+  - リファクタリングを行い重複を除去する
+- リファクタリングは小さい変更を身重ねるべき
+- テスト駆動開発が担わないもの
+  - パフォーマンステスト
+  - 負荷テスト
+  - ユーザビリティテスト
+- 広く知られているテスト評価手法
+  - カバレッジ: 厳密なテスト駆動開発では 100%になるべき
+  - 欠陥挿入: プロダクトコードの任意の行の意味合いを変えたらテストは失敗するはず
+- カバレッジの向上はテストを増やす以外にも、プロダクトコードのリファクタリングで行うこともできる
+- テスト駆動開発の３つの驚き
+  - 仮実装、三角測量、明白実装という３つのアプローチがある
+  - コード間の重複除去によって、設計が駆動していく
+  - テストの粒度を調整することでリスクに対応することができる
